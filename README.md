@@ -135,3 +135,82 @@ if __name__ == "__main__":
 3. **Kesh va Optional**: `@lru_cache` bilan bezatilgan `search_book_by_title_cached` funksiyasi qidiruv natijasini keshlaydi. Agar kitob topilmasa, aniq `Optional[str]` tipiga muvofiq ravishda `None` qaytaradi.
 4. **Set Comprehension**: `{book["author"] for book in books}` qatori yordamida takrorlanmaydigan (noyob) mualliflar to'plami bir qatorda yig'ib olindi.
 5. **Generator + `lru_cache` Tuzog'i**: Generator funksiyalarga `@lru_cache` qo'llanilganda, Python keshda yaratilgan generator obyektining o'zini saqlab qoladi. Ikkinchi marta chaqirilganda generator avvalgi safar oxirigacha o'qib bo'lingani uchun bo'sh (`exhausted`) qaytadi. To'g'ri yechim sifatida generatorlarga emas, balki aniq natija (qiymat yoki tuple/list) qaytaruvchi funksiyalarga kesh qo'llash kerak.
+Barcha talablarni to'liq o'z ichiga olgan, `asyncio` yordamida ketma-ket va konkurrent vazifalarni bajarib, ularning bajarilish vaqtini solishtiradigan to'liq dastur:
+
+```python
+"""
+Asyncio yordamida konkurrent vazifalar va vaqtni o'lchash namunasi.
+Ushbu modul mypy va Python tip tekshiruvidan toza o'tadi.
+"""
+
+import asyncio
+import time
+from typing import List
+
+
+async def simulate_io_task(task_name: str, delay: float) -> str:
+    """
+    await asyncio.sleep(...) yordamida I/O kutishni simulyatsiya qiluvchi korutin.
+    """
+    print(f"[{task_name}] boshlandi (kutish: {delay}s)...")
+    await asyncio.sleep(delay)
+    print(f"[{task_name}] tugadi.")
+    return f"{task_name} natijasi"
+
+
+async def main() -> None:
+    # Vazifalar uchun kechikish vaqtlari (sekundda)
+    delays: List[float] = [2.0, 3.0, 1.0]
+
+    print("=" * 50)
+    print("1. KETMA-KET (Sequential) bajarilish:")
+    print("=" * 50)
+    
+    start_seq = time.perf_counter()
+    
+    # Har bir korutinni ketma-ket await qilish
+    res1 = await simulate_io_task("Task-1", delays[0])
+    res2 = await simulate_io_task("Task-2", delays[1])
+    res3 = await simulate_io_task("Task-3", delays[2])
+    
+    end_seq = time.perf_counter()
+    total_seq_time = end_seq - start_seq
+    print(f"Ketma-ket bajarilish vaqti: {total_seq_time:.2f} sekund\n")
+
+    print("=" * 50)
+    print("2. KONKURRENT (Concurrent - asyncio.gather) bajarilish:")
+    print("=" * 50)
+    
+    start_conc = time.perf_counter()
+    
+    # asyncio.gather yordamida barcha korutinlarni bir vaqtning o'zida ishga tushirish
+    results = await asyncio.gather(
+        simulate_io_task("Task-1", delays[0]),
+        simulate_io_task("Task-2", delays[1]),
+        simulate_io_task("Task-3", delays[2])
+    )
+    
+    end_conc = time.perf_counter()
+    total_conc_time = end_conc - start_conc
+    print(f"Konkurrent bajarilish vaqti: {total_conc_time:.2f} sekund")
+    print(f"Natijalar: {results}\n")
+
+    print("=" * 50)
+    print("XULOSA:")
+    print("=" * 50)
+    print(f"Ketma-ket vaqt: {total_seq_time:.2f}s (barcha vaqtlar yig'indisi)")
+    print(f"Konkurrent vaqt: {total_conc_time:.2f}s (eng uzun vazifa vaqtiga yaqin - kutishlar ustma-ust tushdi)")
+
+
+if __name__ == "__main__":
+    # Event loop'ni ishga tushirish
+    asyncio.run(main())
+
+```
+
+---
+
+### Qoida va tushuntirish:
+
+* **I/O-bound ish uchun `asyncio**`: Tarmoqdan ma'lumot olish, fayl o'qish/yozish yoki ma'lumotlar bazasiga so'rov yuborish kabi tashqi kutilishlar ko'p bo'lgan vazifalarda `asyncio` bitta oqimda (single-threaded) resurslarni tejagan holda juda ko'p vazifalarni parallel (konkurrent) bajarish imkonini beradi.
+* **CPU-bound ish uchun `multiprocessing**`: Matematik hisob-kitoblar, shifrlash yoki rasmlarni qayta ishlash kabi protsessorni band qiladigan og'ir amallarda Python Global Interpreter Lock (GIL) tufayli `asyncio` yordam bermaydi, shuning uchun `multiprocessing` ishlatiladi.
